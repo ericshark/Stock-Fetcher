@@ -3,70 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Marketing Analysis</title>
+    <title>Stock Fetcher</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Chart.js and Financial Chart Plugin -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            background: #f8f9fa;
+        }
+
+        .hero {
+            background: linear-gradient(to bottom right, #007bff, #00a2ff);
+            color: white;
+        }
+
+        footer {
+            background-color: #343a40;
+            color: white;
+            padding: 1rem 0;
+            text-align: center;
+            margin-top: auto;
+        }
+    </style>
 </head>
 <body>
     <!-- Hero Section -->
-    <section class="bg-primary text-white text-center py-5">
+    <section class="hero text-center py-5">
         <div class="container">
-            <h1>MARKETING ANALYSIS</h1>
-            <p class="lead">Innovative marketing solutions to take your brand to the next level.</p>
-            <a href="#stock-charts" class="btn btn-light btn-lg">Get Started</a>
+            <h1 class="fw-bold">Stock Fetcher</h1>
+            <p class="lead">Enter a stock ticker to fetch real-time data and store it in the database.</p>
         </div>
     </section>
 
-    <!-- Stock Charts  -->
-    <section id="stock-charts" class="py-5">
+    <!-- Stock Input Section -->
+    <section class="py-5">
         <div class="container">
-            <h2 class="text-center mb-4">Stock Price Analysis</h2>
+            <h2 class="text-center mb-4">Enter Stock Ticker</h2>
+            <form id="stockForm" class="d-flex justify-content-center">
+                <input type="text" id="stockSymbol" class="form-control w-25 me-3" placeholder="e.g., AAPL, MSFT">
+                <button type="submit" class="btn btn-primary px-4">Fetch Data</button>
+            </form>
+        </div>
+    </section>
 
-          
-
-            <!--  Candlestick  -->
-            <div class="mb-5">
-                <canvas id="candlestickChart" width="400" height="200"></canvas>
-            </div>
-
-            <!-- Embedded TradingView Chart -->
-            <div class="tradingview-widget-container">
-                <div id="tradingview_widget"></div>
+    <!-- Stock Info Section -->
+    <section class="pb-5">
+        <div class="container">
+            <div id="stockDetails" class="text-center mx-auto" style="max-width: 600px;">
+                <p class="text-muted">Enter a stock ticker above and click "Fetch Data" to view stock details.</p>
             </div>
         </div>
     </section>
 
     <!-- Footer -->
-    <footer class="bg-dark text-white text-center py-3">
-        <p>&copy; 2024 Marketing Analysis. All rights reserved.</p>
+    <footer>
+        <p class="mb-0">&copy; 2024 Stock Fetcher. All rights reserved.</p>
     </footer>
 
-    <!-- TradingView -->
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <!-- Scripts -->
     <script>
-        new TradingView.widget({
-            container_id: "tradingview_widget",
-            width: "100%",
-            height: 400,
-            symbol: "BITSTAMP:BTCUSD",
-            interval: "D",
-            timezone: "Etc/UTC",
-            theme: "light",
-            style: "1",
-            locale: "en",
-            toolbar_bg: "#f1f3f6",
-            enable_publishing: false,
-            hide_top_toolbar: true,
-            save_image: false,
-            studies: [],
-            show_popup_button: true,
-            popup_width: "1000",
-            popup_height: "650"
+        document.getElementById('stockForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+            const stockSymbol = document.getElementById('stockSymbol').value.trim();
+
+            if (!stockSymbol) {
+                alert('Please enter a stock ticker.');
+                return;
+            }
+
+            fetch(`php/fetch_and_store_stock.php?symbol=${stockSymbol}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (!data || data.error) {
+                        document.getElementById('stockDetails').innerHTML = `
+                            <div class="alert alert-danger" role="alert">
+                                ${data.error || 'No data found for the entered stock.'}
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    document.getElementById('stockDetails').innerHTML = `
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h3 class="card-title">${data.symbol} </h3>
+                                <hr>
+                                <p><strong>Current Price:</strong> $${data.current_price}</p>
+                                <p><strong>Day High:</strong> $${data.day_high}</p>
+                                <p><strong>Day Low:</strong> $${data.day_low}</p>
+                                <p class="text-muted"><small>Last Updated: ${new Date(data.last_updated).toLocaleString()}</small></p>
+                            </div>
+                        </div>
+                    `;
+                })
+                .catch(error => {
+                    console.error('Error fetching stock data:', error);
+                    document.getElementById('stockDetails').innerHTML = `
+                        <div class="alert alert-danger" role="alert">
+                            Failed to fetch stock data. Please try again.
+                        </div>
+                    `;
+                });
         });
     </script>
-
 </body>
 </html>
