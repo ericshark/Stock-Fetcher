@@ -1,59 +1,77 @@
 <?php
-// Enable error reporting
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
+// Include database connection
 include 'db.php';
 
-$symbol = strtoupper($_GET['symbol'] ?? ''); // Convert symbol to uppercase
+// Get the stock symbol from the GET request
+$symbol = strtoupper($_GET['symbol'] ?? ''); // Convert to uppercase
 if (empty($symbol)) {
     echo json_encode(['error' => 'No stock ticker provided.']);
     exit;
 }
 
-// API Configuration
-$apiKey = '1TTGEHDY3IDFZWKDY'; // Replace with your Alpha Vantage API key
-$apiUrl = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=$symbol&apikey=$apiKey";
+// Check if the stock exists in the database
+$stmt = $pdo->prepare("SELECT * FROM stock_summary WHERE symbol = :symbol");
+$stmt->execute(['symbol' => $symbol]);
+$stock = $stmt->fetch(PDO::FETCH_ASSOC);
 
-try {
-    // Fetch stock data from API
-    $apiResponse = file_get_contents($apiUrl);
-    $stockData = json_decode($apiResponse, true);
+// Fetch from MarketStack API if stock doesn't exist or is older than 1 day
+if (!$stock || (strtotime($stock['last_updated']) < strtotime('-1 day'))) {
+    $apiKey = 'b72e36a7fcfc2bcd8c5bce45c6ee75e2'; // Replace with your MarketStack API key
+    $apiUrl = "http://api.marketstack.com/v1/eod/latest?access_key=$apiKey&symbols=$symbol";
 
-    if (empty($stockData['Global Quote'])) {
-        echo json_encode(['error' => 'No data found for the entered stock.']);
-        exit;
+    try {
+        // Fetch data using cURL
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $apiUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $apiResponse = curl_exec($ch);
+        curl_close($ch);
+
+        // Check if the API response is valid
+        if (!$apiResponse) {
+            echo json_encode(['error' => 'Failed to fetch data from MarketStack API.']);
+            exit;
+        }
+
+        $stockData = json_decode($apiResponse, true);
+
+        // Validate the API response
+        if (empty($stockData['data']) || count($stockData['data']) === 0) {
+            echo json_encode(['error' => 'No data found for the entered stock.']);
+            exit;
+        }
+
+        // Extract relevant data
+        $latestData = $stockData['data'][0];
+        $data = [
+            'symbol' => $latestData['symbol'],
+            'current_price' => (float) $latestData['close'],
+            'day_high' => (float) $latestData['high'],
+            'day_low' => (float) $latestData['low'],
+            'last_updated' => date('Y-m-d H:i:s') // Current timestamp
+        ];
+
+        // Store or update data in the database
+        $stmt = $pdo->prepare("
+            INSERT INTO stock_summary (symbol, current_price, day_high, day_low, last_updated)
+            VALUES (:symbol, :current_price, :day_high, :day_low, :last_updated)
+            ON DUPLICATE KEY UPDATE 
+                current_price = :current_price, 
+                day_high = :day_high, 
+                day_low = :day_low, 
+                last_updated = :last_updated
+        ");
+        if (!$stmt->execute($data)) {
+            echo json_encode(['error' => 'Failed to update database.']);
+            exit;
+        }
+
+        // Return the fetched data
+        echo json_encode($data);
+    } catch (Exception $e) {
+        echo json_encode(['error' => 'An error occurred while processing the request.']);
     }
-
-    // Extract relevant data
-    $quote = $stockData['Global Quote'];
-    $data = [
-        'symbol' => $quote['01. symbol'],
-        'company_name' => 'N/A', // Add a proper API for company names if needed
-        'current_price' => (float) $quote['05. price'],
-        'market_cap' => 0, // Market cap data not available in Alpha Vantage's free tier
-        'day_high' => (float) $quote['03. high'],
-        'day_low' => (float) $quote['04. low'],
-        'last_updated' => date('Y-m-d H:i:s')
-    ];
-
-    // Store data in the database
-    $stmt = $pdo->prepare("
-        INSERT INTO stock_summary (symbol, company_name, current_price, market_cap, day_high, day_low, last_updated)
-        VALUES (:symbol, :company_name, :current_price, :market_cap, :day_high, :day_low, :last_updated)
-        ON DUPLICATE KEY UPDATE 
-            current_price = :current_price, 
-            day_high = :day_high, 
-            day_low = :day_low, 
-            last_updated = :last_updated
-    ");
-    $stmt->execute($data);
-
-    // Return the fetched data as JSON
-    echo json_encode($data);
-
-} catch (Exception $e) {
-    echo json_encode(['error' => $e->getMessage()]);
+} else {
+    // Return data from the database
+    echo json_encode($stock);
 }
-?>
