@@ -16,7 +16,7 @@ $stock = $stmt->fetch(PDO::FETCH_ASSOC);
 
 // Fetch from MarketStack API if stock doesn't exist or is older than 1 day
 if (!$stock || (strtotime($stock['last_updated']) < strtotime('-1 day'))) {
-    $apiKey = 'b72e36a7fcfc2bcd8c5bce45c6ee75e2'; // Replace with your MarketStack API key
+    $apiKey = 'b72e36a7fcfc2bcd8c5bce45c6ee75e2'; 
     $apiUrl = "http://api.marketstack.com/v1/eod/latest?access_key=$apiKey&symbols=$symbol";
 
     try {
@@ -34,13 +34,14 @@ if (!$stock || (strtotime($stock['last_updated']) < strtotime('-1 day'))) {
         }
 
         $stockData = json_decode($apiResponse, true);
+    
 
         // Validate the API response
         if (empty($stockData['data']) || count($stockData['data']) === 0) {
             echo json_encode(['error' => 'No data found for the entered stock.']);
             exit;
         }
-
+      
         // Extract relevant data
         $latestData = $stockData['data'][0];
         $data = [
@@ -48,19 +49,21 @@ if (!$stock || (strtotime($stock['last_updated']) < strtotime('-1 day'))) {
             'current_price' => (float) $latestData['close'],
             'day_high' => (float) $latestData['high'],
             'day_low' => (float) $latestData['low'],
-            'last_updated' => date('Y-m-d H:i:s') // Current timestamp
+            'open' => (float) $latestData['open'],
+            'last_updated' => date('Y-m-d H:i:s') 
         ];
 
         // Store or update data in the database
         $stmt = $pdo->prepare("
-            INSERT INTO stock_summary (symbol, current_price, day_high, day_low, last_updated)
-            VALUES (:symbol, :current_price, :day_high, :day_low, :last_updated)
+            INSERT INTO stock_summary (symbol, current_price, day_high, day_low, open, last_updated)
+            VALUES (:symbol, :current_price, :day_high, :day_low, :open, :last_updated)
             ON DUPLICATE KEY UPDATE 
-                current_price = :current_price, 
-                day_high = :day_high, 
-                day_low = :day_low, 
-                last_updated = :last_updated
-        ");
+            current_price = :current_price, 
+            day_high = :day_high, 
+            day_low = :day_low, 
+            open = :open,
+            last_updated = :last_updated"
+        );
         if (!$stmt->execute($data)) {
             echo json_encode(['error' => 'Failed to update database.']);
             exit;
